@@ -1,0 +1,25 @@
+# Private keystores and credentials — never commit
+certificate/*.pfx
+certificate/*.p12
+certificate/*.pem
+certificate/*.key
+*.pfx
+*.p12
+*.pem
+*.key
+id_rsa*
+.env
+.env.*
+!.env.example
+/vendor/
+/node_modules/
+.idea/
+.vscode/
+*.swp
+*~
+.DS_Store
+Thumbs.db
+phpunit.cache/
+.phpunit.result.cache
+coverage/
+composer.phar
