@@ -1,21 +1,47 @@
-Google OAuth 2 Client PHP App
-=============================
-This code is a very simple PHP implementation for Google's OAuth 2.0 API service.
+# OpenEMR Bamboo PMP (PDMP / NarxCare)
 
-It is intended as a complement to my tutorial:
-http://20missionglass.tumblr.com/post/60787835108/programming-an-oauth2-client-app-in-php
+OpenEMR custom module for Bamboo Health prescription drug monitoring (PMP/PDMP) reporting and NarxCare-related workflows.
 
-Configuration
---------------
-Log into your Google APIs console (http://code.google.com/apis/console), navigate to the API Overview,
-and set up your web app.  Copy and paste your Client ID, Client Secret, and Redirect URI into config.php:
- 
+**Module Manager name:** Bamboo PMP Report  
+**Package version:** 1.0.0 (`version.php`)  
+**Author:** Sherwin Gaddis
 
+## Compatibility
 
-    $oauth2_client_id = 'OAUTH_2_CLIENT_ID';
-    $oauth2_secret = 'OAUTH_2_SECRET';
-    $oauth2_redirect = 'https://example.com/oauth2callback';
+| Target | Status |
+|--------|--------|
+| OpenEMR **7.0.x** | Primary target for this line |
+| OpenEMR **8.0+** | May require global-bag / session-wrapper updates |
 
-Now You should be good to go.
+- PHP **8.1+** recommended  
+- Requires PHP `curl` extension  
+- Client TLS certificate (`.pfx`) is **not** shipped in git — see `certificate/README.md`
 
+## Certificate
 
+Place your vendor-issued client certificate at:
+
+```text
+certificate/certificate.pfx
+```
+
+This path is gitignored. Never commit keystores or passphrases.
+
+## Installation
+
+```bash
+cd /path/to/openemr/interface/modules/custom_modules
+git clone https://github.com/juggernautsei/oe-bamboo-pmp.git
+```
+
+Register and enable in Module Manager. Configure credentials and certificate on the server outside of source control.
+
+## License
+
+This module is released under the **GNU General Public License v3.0** (GPL-3.0-only), consistent with OpenEMR.  
+See [LICENSE](LICENSE).
+
+## Support
+
+Sherwin Gaddis / Juggernaut Systems Enterprise  
+https://github.com/juggernautsei/oe-bamboo-pmp
