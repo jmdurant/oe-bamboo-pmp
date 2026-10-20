@@ -40,7 +40,8 @@ namespace {
         return str_contains($sql, 'patient_data') ? ['pid'=>$params[0], 'squad'=>'']
             : ['username'=>'synthetic', 'password'=>'synthetic'];
     }
-    $root = dirname(__DIR__);
+    // Optional installed source root; tests stay outside the public module tree.
+    $root = getenv('BAMBOO_TEST_SOURCE') ?: dirname(__DIR__);
     require "$root/src/Interfaces/DataRequestXmlBuilders.php";
     foreach (['ReportDestination','ReportAccess','ResourcesConfig','GatewayRequests','ReportDisplayRequest'] as $class) {
         require "$root/src/Controllers/$class.php";
