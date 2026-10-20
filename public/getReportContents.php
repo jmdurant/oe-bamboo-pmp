@@ -13,6 +13,12 @@
 namespace Juggernaut\Module\Bamboo\Controllers;
 require_once dirname(__DIR__, 4) . "/globals.php";
 
-$report = new ReportDisplayRequest();
-$report->url = $_POST['url'];
-$report->fetchReportDisplay();
+try {
+    $context = ReportAccess::requirePost();
+    $url = ReportAccess::resolve($_POST['report_ref'] ?? null, 'display', $context);
+    $report = new ReportDisplayRequest();
+    $report->url = $url;
+    $report->fetchReportDisplay();
+} catch (\Throwable $error) {
+    ReportAccess::fail($error);
+}

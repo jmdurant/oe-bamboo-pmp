@@ -26,6 +26,7 @@ class GatewayRequests
     }
     public function fetchReportData($url)
     {
+        $url = ReportDestination::validate($url);
         $credentials = new ResourcesConfig();
         $usernamePassword = $credentials->getConnectionData();
         $password = $this->cryptoGen->decryptStandard($usernamePassword['password'], null, 'database');
@@ -42,16 +43,14 @@ class GatewayRequests
 
 // Define the URL and XML data to be sent by passing in the url and the XML builder
         $xmlData = $this->dataRequestXmlBuilders->buildReportDataRequestXml();
-        file_put_contents("/var/www/html/quest/xmlData.xml", print_r($xmlData, true));
 // Initialize cURL session
         $ch = curl_init($url);
+        ReportDestination::configure($ch);
 
 // Set cURL options
         curl_setopt($ch, CURLOPT_POST, true);
         curl_setopt($ch, CURLOPT_POSTFIELDS, $xmlData);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, true);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
 
         $pfxCertificatePath = dirname(__DIR__, 3) .
             DIRECTORY_SEPARATOR . "oe-bamboo-pmp/certificate/certificate.pfx";
@@ -66,7 +65,6 @@ class GatewayRequests
             "Accept-Encoding: gzip,deflate",
             "Accept: */*",
             "Connection: Keep-Alive",
-            "Host: secure.prep.pmpgateway.net",
         ];
         curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
 
@@ -76,13 +74,13 @@ class GatewayRequests
 
 // Execute the cURL request and capture the response
         $response = curl_exec($ch);
+        $status = curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
 
 // Check for errors
-        if ($response === false) {
-            $error = curl_error($ch);
+        if ($response === false || $status < 200 || $status >= 300) {
             // Close the cURL session
             curl_close($ch);
-            return "cURL Error: $error";
+            throw new \RuntimeException('Report request failed');
         } else {
             // Close the cURL session
             curl_close($ch);

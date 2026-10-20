@@ -10,15 +10,23 @@
  * @license   https://github.com/openemr/openemr/blob/master/LICENSE GNU General Public License 3
  */
 
+$sessionAllowWrite = true;
 require_once dirname(__DIR__, 4) . "/globals.php";
 
 use OpenEMR\Common\Acl\AclMain;
 use OpenEMR\Core\Header;
 use Juggernaut\Module\Bamboo\Controllers\PatientDataRequestMinXmlBuilder;
 use Juggernaut\Module\Bamboo\Controllers\GatewayRequests;
+use Juggernaut\Module\Bamboo\Controllers\ReportAccess;
 
-if (empty($_SESSION['pid'])) {
-    die('No patient id set');
+header('Cache-Control: no-store');
+header('Referrer-Policy: no-referrer');
+try {
+    $context = ReportAccess::context();
+    $csrf = ReportAccess::csrf();
+} catch (Throwable $error) {
+    ReportAccess::fail($error);
+    exit;
 }
 
 $xmlBuilderMin = new PatientDataRequestMinXmlBuilder();
@@ -26,13 +34,23 @@ $gatewayRequests = new GatewayRequests($xmlBuilderMin);
 $gatewayRequests->url = "https://mutualauth.pmpgateway.net/v5_1/patient";
 
 //fetching the report data
-$report = $gatewayRequests->fetchReportData($gatewayRequests->url);
+try {
+    $report = $gatewayRequests->fetchReportData($gatewayRequests->url);
 
 //return results
 libxml_use_internal_errors(TRUE);
-$simpleXml = simplexml_load_string($report);
+if (str_contains($report, '<!DOCTYPE')) throw new RuntimeException();
+$simpleXml = simplexml_load_string($report, 'SimpleXMLElement', LIBXML_NONET);
 $objXmlDocument = json_encode($simpleXml);
 $arrOutput = json_decode($objXmlDocument, TRUE);
+$reportRef = null;
+if (isset($arrOutput['Report']['ReportRequestURLs']['ViewableReport'])) {
+    $reportRef = ReportAccess::issue($arrOutput['Report']['ReportRequestURLs']['ViewableReport'], 'request', $context);
+}
+} catch (Throwable $error) {
+    ReportAccess::fail($error);
+    exit;
+}
 
 ?>
 <html>
@@ -51,14 +69,6 @@ $arrOutput = json_decode($objXmlDocument, TRUE);
                    title="<?php echo xla('Go Back') ?>">
                     <i id="advanced-tooltip" class="fa fa-undo fa-2x" aria-hidden="true"></i></a><?php xlt('Back') ?>
             </div>
-            <?php
-            if (!AclMain::aclCheckCore('patients', 'med', '', array('write','addonly'))):  ?>
-                <div class="row">
-                    <div class="col-sm-12">
-                        what is this
-                    </div>
-                </div>
-            <?php  endif; ?>
             <?php
             if (!$arrOutput) {
                 echo "<p>" . xlt("Bamboo not authorized - return to dashboard") . "</p>";
@@ -87,10 +97,13 @@ $arrOutput = json_decode($objXmlDocument, TRUE);
                 ?>
             </table>
             <h3><?php echo xlt("Report Exp") ?></h3>
-            <p><?php echo $arrOutput['Report']['ReportExpiration'] ?></p>
-            <p class="m-3"><?php echo $arrOutput['Report']['Message'] ?></p>
+            <p><?php echo text($arrOutput['Report']['ReportExpiration'] ?? '') ?></p>
+            <p class="m-3"><?php echo text($arrOutput['Report']['Message'] ?? '') ?></p>
             <h3><?php echo xlt("Full Report") ?></h3>
+            <?php if ($reportRef !== null): ?>
             <p><button class="btn btn-primary" onclick="requestFullReport()"><?php echo xlt("Request Full Report") ?></button> </p>
+            <?php endif; ?>
+            <p id="report-error" role="alert" hidden><?php echo xlt('Report unavailable. Reload patient history or contact your administrator.'); ?></p>
             <h3><?php echo xlt("Disclaimer") ?></h3>
             <p><?php echo xlt($arrOutput['Disclaimer']) ?></p>
         </div>
@@ -98,22 +111,29 @@ $arrOutput = json_decode($objXmlDocument, TRUE);
 
 </div><!--end of container div -->
 <script>
-    //adding this as a warning message that is not visible to the user
     async function requestFullReport() {
-        const url = "<?php echo $arrOutput['Report']['ReportRequestURLs']['ViewableReport']; ?>";
-
-        fetch('fetchFullReport.php', {
+        // Open synchronously to preserve the user gesture; no vendor URL comes from the browser.
+        const reportWindow = window.open('about:blank', '_blank');
+        if (reportWindow) reportWindow.opener = null;
+        try {
+        const response = await fetch('fetchFullReport.php', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/x-www-form-urlencoded',
             },
-            body: 'url=' + url
-        })
-            .then(response => response.text())
-            .then(data => {
-                console.log(data);
-                window.open(data, '_blank');
-            });
+            body: new URLSearchParams({
+                report_ref: <?php echo json_encode($reportRef); ?>,
+                csrf_token_form: <?php echo json_encode($csrf); ?>
+            })
+        });
+        if (!response.ok) throw new Error('Report unavailable');
+        const link = await response.text(); // Server validates the vendor origin.
+        if (reportWindow) reportWindow.location.replace(link);
+        else window.location.assign(link);
+        } catch (_) {
+            if (reportWindow) reportWindow.close();
+            document.getElementById('report-error').hidden = false;
+        }
     }
 </script>
 </body>

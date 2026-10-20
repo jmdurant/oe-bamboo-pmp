@@ -13,6 +13,9 @@
         "php": ">=8.1",
         "ext-curl": "*"
     },
+    "scripts": {
+        "test": ["@php tests/report-boundary.php", "@php tests/report-boundary.php --wrapped"]
+    },
     "type": "openemr-module",
     "keywords": [
         "openemr",

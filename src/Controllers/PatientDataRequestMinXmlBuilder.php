@@ -21,7 +21,7 @@ class PatientDataRequestMinXmlBuilder implements DataRequestXmlBuilders
 
     public function __construct()
     {
-        $this->patientData = getPatientData($_SESSION['pid']);
+        $this->patientData = getPatientData(ReportAccess::get('pid'));
     }
 
     public function buildReportDataRequestXml(): string

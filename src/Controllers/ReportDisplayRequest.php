@@ -24,6 +24,7 @@ class ReportDisplayRequest
     }
     public function fetchReportDisplay()
     {
+        $url = ReportDestination::validate($this->url);
         $certPath = dirname(__DIR__, 3) . DIRECTORY_SEPARATOR . "oe-bamboo-pmp/certificate/certificate.pfx";
 
         $credentials = new ResourcesConfig();
@@ -43,9 +44,10 @@ class ReportDisplayRequest
 
         // Initialize cURL session
         $ch = curl_init();
+        ReportDestination::configure($ch);
 
         // Set cURL options
-        curl_setopt($ch, CURLOPT_URL, $this->url);
+        curl_setopt($ch, CURLOPT_URL, $url);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         //curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, true);
         //curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
@@ -61,13 +63,18 @@ class ReportDisplayRequest
         //curl_setopt($ch, CURLOPT_SSLCERTTYPE, 'P12');
 
         $response = curl_exec($ch);
+        $status = curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
 
         // Check for errors
-        if (curl_errno($ch)) {
-            echo 'Curl error: ' . curl_error($ch);
+        if ($response === false || $status < 200 || $status >= 300) {
+            curl_close($ch);
+            throw new \RuntimeException('Report display failed');
         } else {
             // Output the response (HTML) directly to the browser
             header('Content-Type: text/html'); // Set the content type to HTML
+            header("Content-Security-Policy: sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src https: data:");
+            header('Cache-Control: no-store');
+            header('Referrer-Policy: no-referrer');
             echo $response;
         }
 

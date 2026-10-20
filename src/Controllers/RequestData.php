@@ -30,6 +30,6 @@ class RequestData
 
     public function userData(): array
     {
-        return $this->userService->getUser($_SESSION['authUserID']);
+        return $this->userService->getUser(ReportAccess::get('authUserID'));
     }
 }
