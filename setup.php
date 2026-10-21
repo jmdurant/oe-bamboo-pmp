@@ -12,17 +12,38 @@
 namespace Juggernaut\Module\Bamboo;
 
 
+$sessionAllowWrite = true;
 require_once dirname(__FILE__, 4) . '/globals.php';
 
 use OpenEMR\Core\Header;
 use Juggernaut\Module\Bamboo\Controllers\ResourcesConfig;
+use Juggernaut\Module\Bamboo\Controllers\ReportAccess;
+use Juggernaut\Module\Bamboo\Controllers\SetupAccess;
 
-$resourcesConfig = new ResourcesConfig();
-
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $storeComplete = $resourcesConfig->storeConnectionData($_POST);
+header('Cache-Control: no-store');
+try {
+    SetupAccess::requireAdmin();
+    $resourcesConfig = new ResourcesConfig();
+    $hasCredentials = $resourcesConfig->getConnectionData();
+    if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
+        SetupAccess::requireToken();
+        if (!empty($hasCredentials['password'])) {
+            throw new \RuntimeException('Credentials already saved', 409);
+        }
+        if (!is_string($_POST['username'] ?? null) || !is_string($_POST['password'] ?? null)) {
+            throw new \RuntimeException('Invalid settings', 400);
+        }
+        $storeComplete = $resourcesConfig->storeConnectionData($_POST);
+        $hasCredentials = $resourcesConfig->getConnectionData();
+    }
+    $csrf = ReportAccess::csrf();
+} catch (\RuntimeException $error) {
+    $status = in_array($error->getCode(), [400, 403, 409], true) ? $error->getCode() : 500;
+    http_response_code($status);
+    header('Content-Type: text/plain; charset=UTF-8');
+    echo xlt('Settings unavailable. Reload setup or contact your administrator.');
+    exit;
 }
-$hasCredentials = $resourcesConfig->getConnectionData();
 ?>
 <!doctype html>
 <html lang="en">
@@ -56,8 +77,9 @@ $hasCredentials = $resourcesConfig->getConnectionData();
                     <?php echo xlt('Settings saved') ?>
                 </div>
             <?php endif; ?>
-            <?php if (!$hasCredentials['password']): ?>
+            <?php if (empty($hasCredentials['password'])): ?>
             <form action="setup.php" method="post">
+                <input type="hidden" name="csrf_token_form" value="<?php echo attr($csrf); ?>">
                 <div class="form-group">
                     <label for="username"><?php echo xlt('Username') ?></label>
                     <input type="text" name="username" id="username" class="form-control">
