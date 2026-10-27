@@ -18,6 +18,7 @@ use OpenEMR\Core\Header;
 use Juggernaut\Module\Bamboo\Controllers\PatientDataRequestMinXmlBuilder;
 use Juggernaut\Module\Bamboo\Controllers\GatewayRequests;
 use Juggernaut\Module\Bamboo\Controllers\ReportAccess;
+use Juggernaut\Module\Bamboo\Controllers\PdmpChartEntry;
 
 header('Cache-Control: no-store');
 header('Referrer-Policy: no-referrer');
@@ -50,6 +51,19 @@ if (isset($arrOutput['Report']['ReportRequestURLs']['ViewableReport'])) {
 } catch (Throwable $error) {
     ReportAccess::fail($error);
     exit;
+}
+
+// Every successful lookup is documented in the chart. A recording failure is
+// shown to the clinician rather than hiding the scores.
+$chartNoteId = null;
+$chartError = false;
+if (is_array($arrOutput) && isset($arrOutput['Report']) && !isset($arrOutput['Error'])) {
+    try {
+        $chartNoteId = PdmpChartEntry::record($context, $arrOutput);
+    } catch (Throwable $error) {
+        $chartError = true;
+        error_log('Bamboo PDMP chart entry failed: ' . get_class($error));
+    }
 }
 
 ?>
@@ -88,14 +102,24 @@ if (isset($arrOutput['Report']['ReportRequestURLs']['ViewableReport'])) {
                     <th><?php echo xlt("Score") ?></th>
                 </tr>
                 <?php
-                foreach ($arrOutput['Report']['NarxScores']['Score'] as $narxScore) {
+                foreach (PdmpChartEntry::scores($arrOutput) as $narxScore) {
                     echo "<tr>";
-                    echo "<td>" . text($narxScore['ScoreType']) . "</td>";
-                    echo "<td>" . text($narxScore['ScoreValue']) . "</td>";
+                    echo "<td>" . text($narxScore['type']) . "</td>";
+                    echo "<td>" . text($narxScore['value']) . "</td>";
                     echo "</tr>";
                 }
                 ?>
             </table>
+            <?php if ($chartNoteId !== null): ?>
+            <div class="alert alert-info">
+                <?php echo xlt('This check was recorded in the chart (patient notes, PDMP Check).'); ?>
+                <button class="btn btn-sm btn-outline-success ml-2" id="reviewed-btn" onclick="markReviewed()"><?php echo xlt('Reviewed, no concerns'); ?></button>
+                <span id="reviewed-msg" hidden><?php echo xlt('Recorded as reviewed.'); ?></span>
+                <span id="reviewed-error" role="alert" hidden><?php echo xlt('Could not record the review. Try again.'); ?></span>
+            </div>
+            <?php elseif ($chartError): ?>
+            <div class="alert alert-warning" role="alert"><?php echo xlt('This check could not be recorded in the chart. Document it in the visit note.'); ?></div>
+            <?php endif; ?>
             <h3><?php echo xlt("Report Exp") ?></h3>
             <p><?php echo text($arrOutput['Report']['ReportExpiration'] ?? '') ?></p>
             <p class="m-3"><?php echo text($arrOutput['Report']['Message'] ?? '') ?></p>
@@ -111,6 +135,27 @@ if (isset($arrOutput['Report']['ReportRequestURLs']['ViewableReport'])) {
 
 </div><!--end of container div -->
 <script>
+    async function markReviewed() {
+        const button = document.getElementById('reviewed-btn');
+        button.disabled = true;
+        try {
+            const response = await fetch('reviewNoConcerns.php', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                body: new URLSearchParams({
+                    note_id: <?php echo json_encode((string)$chartNoteId); ?>,
+                    csrf_token_form: <?php echo json_encode($csrf); ?>
+                })
+            });
+            if (!response.ok) throw new Error('not recorded');
+            button.hidden = true;
+            document.getElementById('reviewed-msg').hidden = false;
+        } catch (_) {
+            button.disabled = false;
+            document.getElementById('reviewed-error').hidden = false;
+        }
+    }
+
     async function requestFullReport() {
         // Open synchronously to preserve the user gesture; no vendor URL comes from the browser.
         const reportWindow = window.open('about:blank', '_blank');
