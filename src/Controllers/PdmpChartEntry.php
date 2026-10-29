@@ -48,10 +48,13 @@ final class PdmpChartEntry
         $now = date('Y-m-d H:i');
         $name = trim(($actor['fname'] ?? '') . ' ' . ($actor['lname'] ?? '')) ?: $actor['username'];
         $expiration = is_scalar($report['Report']['ReportExpiration'] ?? null) ? (string)$report['Report']['ReportExpiration'] : '';
+        // Audit reference only: never persist the session's bearer report URL.
+        // Hash the exact decoded gateway Report snapshot, not merely the scores.
+        $reference = hash('sha256', json_encode($report['Report'], JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES));
         $id = sqlInsert(
             'INSERT INTO pnotes (date, body, pid, user, groupname, authorized, activity, title, assigned_to,
                 message_status, update_by, update_date) VALUES (NOW(), ?, ?, ?, ?, 1, 1, ?, \'\', \'Done\', ?, NOW())',
-            ["$now ({$actor['username']}) " . self::body($name, $now, self::scores($report), $expiration),
+            ["$now ({$actor['username']}) " . self::body($name, $now, self::scores($report), $expiration) . "\nReport snapshot reference (SHA-256): $reference.",
                 $context['pid'], $actor['username'], 'Default', self::NOTE_TYPE, $context['actor']]
         );
         if (!$id) throw new \RuntimeException('PDMP chart entry not recorded');
@@ -64,8 +67,9 @@ final class PdmpChartEntry
         $note = sqlQuery('SELECT id FROM pnotes WHERE id = ? AND pid = ? AND title = ? AND deleted = 0',
             [$noteId, $context['pid'], self::NOTE_TYPE]);
         if (!is_array($actor) || !is_array($note)) throw new \RuntimeException('PDMP entry not found', 404);
-        sqlStatement('UPDATE pnotes SET body = CONCAT(body, ?), update_by = ?, update_date = NOW() WHERE id = ?',
+        $updated = sqlStatement('UPDATE pnotes SET body = CONCAT(body, ?), update_by = ?, update_date = NOW() WHERE id = ?',
             ["\n" . date('Y-m-d H:i') . " ({$actor['username']}) Reviewed, no concerns.", $context['actor'], $noteId]);
+        if ($updated === false) throw new \RuntimeException('PDMP review not recorded');
     }
 
     private static function ensureNoteType(): void

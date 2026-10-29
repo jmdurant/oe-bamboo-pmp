@@ -14,7 +14,7 @@
         "ext-curl": "*"
     },
     "scripts": {
-        "test": ["@php tests/report-boundary.php", "@php tests/report-boundary.php --wrapped", "@php tests/setup-boundary.php"]
+        "test": ["@php tests/report-boundary.php", "@php tests/report-boundary.php --wrapped", "@php tests/setup-boundary.php", "@php tests/pdmp-chart-entry.php"]
     },
     "type": "openemr-module",
     "keywords": [
