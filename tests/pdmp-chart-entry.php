@@ -22,7 +22,7 @@ function sqlInsert($sql, $binds) {
 }
 function sqlStatement($sql, $binds = []) {
     if (str_contains($sql, 'list_options')) { $GLOBALS['options']++; return true; }
-    if (str_starts_with($sql, 'UPDATE pnotes SET body = CONCAT')) { $GLOBALS['notes'][$binds[2]]['body'] .= $binds[0]; return true; }
+    if (str_starts_with($sql, 'UPDATE pnotes SET body = CONCAT')) { if (!empty($GLOBALS['fail_review'])) return false; $GLOBALS['notes'][$binds[2]]['body'] .= $binds[0]; return true; }
     throw new RuntimeException('Unexpected statement');
 }
 require_once __DIR__ . '/../src/Controllers/PdmpChartEntry.php';
@@ -43,13 +43,27 @@ $check($note['pid'] === 42 && $note['user'] === 'drsmith' && $note['title'] === 
 $check(str_contains($note['body'], 'by Jamie Smith') && str_contains($note['body'], 'Narcotic 310; Stimulant 150')
     && str_contains($note['body'], 'Report available until 2026-10-28T10:00:00') && str_contains($note['body'], 'Full report not saved'),
     'who, scores, expiry and no-full-report statement');
-$check($GLOBALS['options'] === 1, 'PDMP Check note type ensured');
+$expected = hash('sha256', json_encode($report['Report'], JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES));
+$check(str_contains($note['body'], "Report snapshot reference (SHA-256): $expected."), 'exact report snapshot fingerprint retained');
+$withLink = $report;
+$withLink['Report']['ReportRequestURLs']['ViewableReport'] = 'https://pmpgateway.net/secret-report-token';
+$linkId = PdmpChartEntry::record(['actor' => 7, 'pid' => 42], $withLink);
+$check(!str_contains($GLOBALS['notes'][$linkId]['body'], 'secret-report-token') && !str_contains($GLOBALS['notes'][$linkId]['body'], 'https://'), 'report access URL never copied into the chart');
+$check($GLOBALS['notes'][$linkId]['body'] !== $note['body'], 'different snapshot has a different reference');
+$check($GLOBALS['options'] === 2, 'PDMP Check note type ensured');
 
 PdmpChartEntry::markReviewed(['actor' => 7, 'pid' => 42], $id);
 $check(str_ends_with($GLOBALS['notes'][$id]['body'], '(drsmith) Reviewed, no concerns.'), 'review appended with reviewer');
 $denied = false;
 try { PdmpChartEntry::markReviewed(['actor' => 7, 'pid' => 99], $id); } catch (RuntimeException $e) { $denied = true; }
 $check($denied, "another patient's session cannot review this note");
+
+$before = $GLOBALS['notes'][$id]['body'];
+$GLOBALS['fail_review'] = true;
+$failed = false;
+try { PdmpChartEntry::markReviewed(['actor' => 7, 'pid' => 42], $id); } catch (RuntimeException $error) { $failed = $error->getMessage() === 'PDMP review not recorded'; }
+$check($failed && $GLOBALS['notes'][$id]['body'] === $before, 'failed review write is not acknowledged');
+$GLOBALS['fail_review'] = false;
 
 $page = file_get_contents(__DIR__ . '/../public/history.php');
 $check(str_contains($page, 'PdmpChartEntry::record($context, $arrOutput)') && str_contains($page, 'PdmpChartEntry::scores($arrOutput)'),

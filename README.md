@@ -81,3 +81,17 @@ See [LICENSE](LICENSE).
 
 Sherwin Gaddis / Juggernaut Systems Enterprise  
 https://github.com/juggernautsei/oe-bamboo-pmp
+
+### PDMP chart receipts
+
+A successful lookup records the checking clinician, time, scores and expiry.
+Its **report snapshot reference** is SHA-256 of the decoded gateway `Report`
+serialized with PHP `JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES`. It is an audit
+fingerprint, not a vendor identifier or a report retrieval link. The report URL
+and full report are not copied into the note; reopening still uses the existing
+short-lived, clinician/patient-bound session flow. This module does not save the
+full report automatically or provide a new full-report attachment action.
+
+`composer test` covers receipt fingerprints, link exclusion and failed review
+writes. `tests/native-pdmp-chart-entry.php` is an opt-in synthetic local database
+check (`PDMP_CHART_NATIVE=1`), not a vendor lookup. It deletes its temporary note.
