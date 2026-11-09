@@ -25,7 +25,6 @@ class ReportDisplayRequest
     public function fetchReportDisplay()
     {
         $url = ReportDestination::validate($this->url);
-        $certPath = dirname(__DIR__, 3) . DIRECTORY_SEPARATOR . "oe-bamboo-pmp/certificate/certificate.pfx";
 
         $credentials = new ResourcesConfig();
         $usernamePassword = $credentials->getConnectionData();
@@ -59,7 +58,6 @@ class ReportDisplayRequest
             "X-Auth-PasswordDigest: $passwordDigest",
         ];
         //curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
-        //curl_setopt($ch, CURLOPT_SSLCERT, $certPath);
         //curl_setopt($ch, CURLOPT_SSLCERTTYPE, 'P12');
 
         $response = curl_exec($ch);

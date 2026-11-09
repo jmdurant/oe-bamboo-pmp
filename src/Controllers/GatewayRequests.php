@@ -27,6 +27,7 @@ class GatewayRequests
     public function fetchReportData($url)
     {
         $url = ReportDestination::validate($url);
+        $certificate = ClientCertificate::path();
         $credentials = new ResourcesConfig();
         $usernamePassword = $credentials->getConnectionData();
         $password = $this->cryptoGen->decryptStandard($usernamePassword['password'], null, 'database');
@@ -52,8 +53,6 @@ class GatewayRequests
         curl_setopt($ch, CURLOPT_POSTFIELDS, $xmlData);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
 
-        $pfxCertificatePath = dirname(__DIR__, 3) .
-            DIRECTORY_SEPARATOR . "oe-bamboo-pmp/certificate/certificate.pfx";
 // Set the HTTP headers
         $headers = [
             "X-Auth-Username: $username",
@@ -68,8 +67,8 @@ class GatewayRequests
         ];
         curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
 
-// Set up the PFX certificate and passphrase
-        curl_setopt($ch, CURLOPT_SSLCERT, $pfxCertificatePath);
+// Client certificate from protected storage (ClientCertificate)
+        curl_setopt($ch, CURLOPT_SSLCERT, $certificate);
         curl_setopt($ch, CURLOPT_SSLCERTTYPE, 'P12');
 
 // Execute the cURL request and capture the response
