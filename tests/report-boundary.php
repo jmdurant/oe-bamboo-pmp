@@ -43,7 +43,7 @@ namespace {
     // Optional installed source root; tests stay outside the public module tree.
     $root = getenv('BAMBOO_TEST_SOURCE') ?: dirname(__DIR__);
     require "$root/src/Interfaces/DataRequestXmlBuilders.php";
-    foreach (['ReportDestination','ReportAccess','ResourcesConfig','GatewayRequests','ReportDisplayRequest'] as $class) {
+    foreach (['ClientCertificate','ReportDestination','ReportAccess','ResourcesConfig','GatewayRequests','ReportDisplayRequest'] as $class) {
         require "$root/src/Controllers/$class.php";
     }
     use Juggernaut\Module\Bamboo\Controllers\ReportDestination as Destination;
@@ -78,8 +78,24 @@ namespace {
         $url = "https://$host:443/v5_1/report?a=1&b=x%2By";
         check(Destination::validate($url) === $url, 'documented host and unchanged query');
     }
-    $gateway->fetchReportData('https://mutualauth.pmpgateway.net/v5_1/report');
+    // The client certificate must come from protected storage outside the module, with private permissions.
+    $certDir = sys_get_temp_dir() . '/bamboo-cert-' . bin2hex(random_bytes(4));
+    mkdir($certDir, 0700);
+    $cert = "$certDir/client.p12"; file_put_contents($cert, 'synthetic'); chmod($cert, 0644);
+    $report = 'https://mutualauth.pmpgateway.net/v5_1/report';
+    putenv("BAMBOO_PMP_CERT_FILE=$certDir/missing.p12");
+    refused(fn() => $gateway->fetchReportData($report), 'missing certificate');
+    putenv("BAMBOO_PMP_CERT_FILE=$cert");
+    refused(fn() => $gateway->fetchReportData($report), 'group or world readable certificate');
+    putenv('BAMBOO_PMP_CERT_FILE=' . "$root/src/Controllers/ClientCertificate.php");
+    refused(fn() => $gateway->fetchReportData($report), 'certificate inside module source');
+    check($GLOBALS['curl_count'] === 0 && $GLOBALS['queries'] === 0, 'certificate checked before credentials and transport');
+    chmod($cert, 0600);
+    putenv("BAMBOO_PMP_CERT_FILE=$cert");
+    register_shutdown_function(function () use ($cert, $certDir) { @unlink($cert); @rmdir($certDir); });
+    $gateway->fetchReportData($report);
     check($GLOBALS['curl_count'] === 1, 'positive gateway transport');
+    check($GLOBALS['curl_options'][CURLOPT_SSLCERT] === realpath($cert), 'transport uses the protected certificate');
     $options = $GLOBALS['curl_options'];
     check($options[CURLOPT_FOLLOWLOCATION] === false && $options[CURLOPT_PROTOCOLS] === CURLPROTO_HTTPS, 'HTTPS without redirects');
     check($options[CURLOPT_SSL_VERIFYHOST] === 2 && $options[CURLOPT_SSL_VERIFYPEER] === true, 'verified TLS');
@@ -116,6 +132,7 @@ namespace {
     $GLOBALS['response'] = '<p>synthetic report</p>';
     ob_start(); $display->fetchReportDisplay(); $html = ob_get_clean();
     check($html === $GLOBALS['response'], 'positive display transport');
+    check(!isset($GLOBALS['curl_options'][CURLOPT_SSLCERT]), 'display sends no client certificate');
     foreach (['fetchFullReport.php','getReportContents.php'] as $file) {
         $source = file_get_contents("$root/public/$file");
         check(!str_contains($source, "\$_POST['url']"), 'no raw URL endpoint');

@@ -19,13 +19,16 @@ OpenEMR custom module for Bamboo Health prescription drug monitoring (PMP/PDMP) 
 
 ## Certificate
 
-Place your vendor-issued client certificate at:
+Bamboo's client certificate holds a private key, so the module refuses to load it from its own
+source tree. Provision it in protected site storage with owner-only permissions (`chmod 600`):
 
 ```text
-certificate/certificate.pfx
+sites/default/documents/.practice/bamboo-client.p12
 ```
 
-This path is gitignored. Never commit keystores or passphrases.
+Set `BAMBOO_PMP_CERT_FILE` to use another location outside the module. Requests are refused when
+the file is missing, inside the module, or readable by group or others. Never commit keystores or
+passphrases.
 
 ## Installation
 

@@ -1,18 +1,12 @@
-# Certificate directory
+# Certificate directory (not used)
 
-Place your Bamboo Health / PMP **client certificate** here for local or server deployment:
+Do not place the client certificate here. Bamboo's client certificate holds a private key, so the module refuses to load it from its own
+source tree. Provision it in protected site storage with owner-only permissions (`chmod 600`):
 
 ```text
-certificate/certificate.pfx
+sites/default/documents/.practice/bamboo-client.p12
 ```
 
-This file is **private** (contains a private key). It is listed in `.gitignore` and must **never** be committed to git.
-
-## Setup
-
-1. Obtain a `.pfx` / `.p12` from your PMP vendor or organization.
-2. Copy it to this directory as `certificate.pfx` (or configure the module path if different).
-3. Restrict filesystem permissions, e.g. `chmod 600 certificate.pfx`.
-4. Store the PFX passphrase in encrypted module settings or a secrets manager — not in source control.
-
-If a certificate was ever committed to a public repository, treat it as compromised and **rotate/reissue** it.
+Set `BAMBOO_PMP_CERT_FILE` to use another location outside the module. Requests are refused when
+the file is missing, inside the module, or readable by group or others. Never commit keystores or
+passphrases.
